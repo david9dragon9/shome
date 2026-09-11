@@ -1,0 +1,11 @@
+# Build output. One binary does everything, and install.sh puts it on your
+# PATH rather than in the tree; these catch a `go build` without -o.
+/shome
+/shomed
+/shomectld
+/shome-shell
+bin/
+dist/
+
+*.o
+.DS_Store

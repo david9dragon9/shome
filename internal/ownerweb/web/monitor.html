@@ -1,0 +1,256 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>shome — this machine</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0d1017;--panel:#141821;--fg:#e7eaf0;--dim:#8b93a1;--line:#232a38;
+      --ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--accent:#60a5fa;--track:#232a38}
+@media(prefers-color-scheme:light){
+  :root{--bg:#f7f8fa;--panel:#fff;--fg:#141821;--dim:#5c6472;--line:#e2e5ea;--track:#e2e5ea}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+     font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{display:flex;gap:.75rem;align-items:baseline;flex-wrap:wrap;
+       padding:.8rem 1rem;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:1rem;margin:0;font-weight:700}
+main{padding:1rem;max-width:920px;margin:0 auto;display:grid;gap:1.25rem}
+section h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
+           color:var(--dim);margin:0 0 .6rem;font-weight:600}
+.dim{color:var(--dim)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.9rem}
+.state{font-weight:700;font-size:1.05rem}
+.state.ok{color:var(--ok)}.state.warn{color:var(--warn)}.state.bad{color:var(--bad)}
+.row{display:flex;align-items:center;gap:.6rem;margin:.35rem 0;font-size:13px}
+.row .lbl{width:4.5rem;color:var(--dim);flex:none}
+.row .num{width:12rem;text-align:right;color:var(--dim);flex:none;
+          font-variant-numeric:tabular-nums}
+.gauge{flex:1;height:8px;background:var(--track);border-radius:4px;overflow:hidden}
+.gauge>i{display:block;height:100%;border-radius:4px;transition:width .4s ease}
+.g-ok>i{background:var(--ok)}.g-warn>i{background:var(--warn)}.g-bad>i{background:var(--bad)}
+.g-unknown{background:repeating-linear-gradient(90deg,var(--track) 0 5px,transparent 5px 10px)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{text-align:left;color:var(--dim);font-weight:600;padding:.3rem .6rem .3rem 0;
+   border-bottom:1px solid var(--line)}
+td{padding:.3rem .6rem .3rem 0;border-bottom:1px solid var(--line)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+button{font:inherit;background:transparent;color:var(--accent);border:1px solid var(--line);
+       border-radius:6px;padding:.3rem .8rem;cursor:pointer}
+button:hover{border-color:currentColor}
+button.solid{background:var(--warn);border-color:var(--warn);color:#1c1400;font-weight:700}
+button.go{background:var(--ok);border-color:var(--ok);color:#03230f;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem}
+.chip{font-size:.68rem;padding:.08rem .45rem;border-radius:999px;
+      border:1px solid var(--line);color:var(--dim)}
+.chip.warn{color:var(--warn);border-color:var(--warn)}
+.chip.bad{color:var(--bad);border-color:var(--bad)}
+.chip.info{color:var(--accent);border-color:var(--accent)}
+.banner{background:var(--panel);border:1px solid var(--bad);border-left-width:3px;
+        border-radius:6px;padding:.5rem .7rem;color:var(--bad);font-size:12.5px}
+.grow{flex:1}
+code{background:var(--track);padding:.05rem .3rem;border-radius:3px}
+</style>
+
+<header>
+  <h1>shome</h1>
+  <span class="dim" id="node"></span>
+  <span class="grow"></span>
+  <span class="dim" id="tick"></span>
+</header>
+
+<main>
+  <div id="unavailable" class="banner" hidden></div>
+
+  <section>
+    <h2>Right now</h2>
+    <div class="card">
+      <div class="state" id="state">…</div>
+      <div class="dim" id="statereason"></div>
+      <div class="chips" id="flags"></div>
+      <p style="margin:.9rem 0 0">
+        <button class="solid" id="pause" onclick="doPause()">Stop contributing</button>
+        <button class="go" id="resume" onclick="doResume()" hidden>Contribute again</button>
+        <span class="dim" id="vetonote"></span>
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>This machine</h2>
+    <div class="card" id="util"></div>
+  </section>
+
+  <section>
+    <h2>What the cluster may use</h2>
+    <div class="card" id="contrib"></div>
+  </section>
+
+  <section>
+    <h2>Running here</h2>
+    <div class="card" id="jobs"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok) throw new Error(await r.text() || r.statusText);
+  return r.json();
+}
+const bytes = b => {
+  if(b===undefined||b===null||b<0) return '-';
+  if(b>=1099511627776) return (b/1099511627776).toFixed(1)+'T';
+  if(b>=1073741824) return (b/1073741824).toFixed(1)+'G';
+  if(b>=1048576) return Math.round(b/1048576)+'M';
+  if(b>=1024) return Math.round(b/1024)+'K';
+  return b+'B';
+};
+const mib = m => (m===undefined||m===null||m<0) ? '-' : bytes(m*1048576);
+const pct = v => (v===undefined||v===null||v<0) ? '-' : Math.round(v)+'%';
+// Unknown is drawn as a dashed track, never as an empty bar: zero and "not
+// measured" are different things and must not look the same.
+const gcls = v => (v===null||v===undefined||v<0) ? 'g-unknown'
+  : v>=90?'g-bad':v>=70?'g-warn':'g-ok';
+function gauge(v){
+  const w=(v===null||v===undefined||v<0)?0:Math.min(100,v);
+  return `<div class="gauge ${gcls(v)}"><i style="width:${w}%"></i></div>`;
+}
+const row = (lbl,v,detail) =>
+  `<div class="row"><span class="lbl">${esc(lbl)}</span>${gauge(v)}`+
+  `<span class="num">${esc(pct(v))} · ${esc(detail)}</span></div>`;
+const dur = s => {
+  if(s===undefined||s===null) return '-';
+  s = Math.floor(s);
+  if(s>=86400) return Math.floor(s/86400)+'d'+Math.floor(s%86400/3600)+'h';
+  if(s>=3600) return Math.floor(s/3600)+'h'+String(Math.floor(s%3600/60)).padStart(2,'0')+'m';
+  if(s>=60) return Math.floor(s/60)+'m'+String(s%60).padStart(2,'0')+'s';
+  return s+'s';
+};
+
+let paused = false;
+async function doPause(){
+  const why = prompt('Why? (optional — it is recorded for you, not the cluster)','');
+  if(why===null) return;
+  try { await api('/api/pause'+(why?'?reason='+encodeURIComponent(why):''), {method:'POST'});
+        await refresh(); } catch(e){ alert(e.message); }
+}
+async function doResume(){
+  try { await api('/api/resume', {method:'POST'}); await refresh(); }
+  catch(e){ alert(e.message); }
+}
+
+function render(st){
+  $('#node').textContent = st.node || '';
+
+  // The headline: is this machine mine right now. Everything else is detail.
+  let cls='ok', label='Contributing to the cluster', reason=st.owner_reason||'';
+  if(st.paused){ cls='warn'; label='Paused — not contributing'; reason=st.pause_reason||''; }
+  else if(st.disk_refusal){ cls='warn'; label='Not taking work'; reason=st.disk_refusal; }
+  else if(st.owner_action==='suspend'||st.owner_action==='drain'){
+    cls='warn'; label='Work suspended'; }
+  else if(st.owner_action==='throttle'){ cls='warn'; label='Throttled for you'; }
+  $('#state').className = 'state '+cls;
+  $('#state').textContent = label;
+  $('#statereason').textContent = reason;
+  paused = !!st.paused;
+  $('#pause').hidden = paused;
+  $('#resume').hidden = !paused;
+  $('#vetonote').textContent = paused
+    ? ' A cluster admin cannot undo this.'
+    : ' Takes effect at once; running jobs are suspended, not killed.';
+
+  const t = st.telemetry || {};
+  const flags = [];
+  if(!st.connected) flags.push(['bad','cannot reach the controller']);
+  if(t.on_battery) flags.push(['warn','on battery']);
+  if(['serious','critical'].includes(t.thermal)) flags.push(['bad','thermal '+t.thermal]);
+  if(['warn','critical'].includes(t.memory_pressure)) flags.push(['warn','memory pressure']);
+  if(t.user_idle_sec>=0 && t.user_idle_sec<60) flags.push(['info','you are at the keyboard']);
+  if(st.tier && st.tier!=='full') flags.push(['warn',st.tier+' tier']);
+  $('#flags').innerHTML = flags.map(([c,x])=>`<span class="chip ${c}">${esc(x)}</span>`).join('');
+
+  const memPct = (t.mem_total_bytes>0)
+    ? 100*t.mem_used_bytes/t.mem_total_bytes : -1;
+  const diskPct = (t.disk_total_bytes>0)
+    ? 100*(t.disk_total_bytes-t.disk_free_bytes)/t.disk_total_bytes : -1;
+  let u = row('cpu', t.cpu_percent,
+        (t.load_avg_1>=0?'load '+t.load_avg_1.toFixed(2):'') +
+        (t.uptime>0?', up '+dur(t.uptime/1e9):''))
+    + row('memory', memPct, bytes(t.mem_used_bytes)+' of '+bytes(t.mem_total_bytes));
+  if(t.disk_total_bytes>0)
+    u += row('disk', diskPct,
+      bytes(t.disk_free_bytes)+' free · shome '+bytes(t.shome_disk_bytes));
+  if(t.inodes_total>0)
+    u += row('files', 100*(t.inodes_total-t.inodes_free)/t.inodes_total,
+      'shome holds '+(t.shome_inodes>=0?t.shome_inodes.toLocaleString():'?'));
+  if(t.net_rx_bytes_per_sec>=0)
+    u += `<div class="row"><span class="lbl">network</span>`+
+         `<span class="grow">${esc(bytes(t.net_rx_bytes_per_sec))}/s in, `+
+         `${esc(bytes(t.net_tx_bytes_per_sec))}/s out</span>`+
+         `<span class="num dim">whole machine</span></div>`;
+  $('#util').innerHTML = u;
+
+  // The gap the owner's policy makes, which is the point of this panel.
+  const line = (lbl, adv, tot, capped) =>
+    `<div class="row"><span class="lbl">${esc(lbl)}</span>`+
+    `<span class="grow"><b>${esc(adv)}</b> <span class="dim">of ${esc(tot)}</span>`+
+    (capped?' <span class="chip warn">your limit</span>':'')+`</span></div>`;
+  let c = line('cores', st.advertised_cpus, st.total_cpus,
+               st.total_cpus>0 && st.advertised_cpus<st.total_cpus)
+        + line('memory', mib(st.advertised_mem_mib), mib(st.total_mem_mib),
+               st.total_mem_mib>0 && st.advertised_mem_mib<st.total_mem_mib);
+  if(st.total_gpus>0 || st.advertised_gpus>0)
+    c += line('gpu', st.advertised_gpus, st.total_gpus, st.advertised_gpus<st.total_gpus);
+  if((st.limitations||[]).length)
+    c += '<div class="dim" style="margin-top:.5rem">'+
+         st.limitations.map(l=>'· '+esc(l)).join('<br>')+'</div>';
+  c += `<p class="dim" style="margin:.7rem 0 0">Change these with <code>shome config</code>.</p>`;
+  $('#contrib').innerHTML = c;
+
+  const jobs = st.jobs || [];
+  $('#jobs').innerHTML = jobs.length ? `<table><thead><tr>
+      <th>job</th><th>name</th><th>whose</th><th class="num">time</th>
+      <th class="num">cpus</th><th class="num">procs</th><th class="num">memory</th><th></th>
+    </tr></thead><tbody>`+
+    jobs.map(j=>`<tr><td>${j.id}</td><td>${esc(j.name)}</td><td>${esc(j.user)}</td>`+
+      `<td class="num">${esc(dur(j.elapsed_sec))}</td><td class="num">${j.cpus}</td>`+
+      `<td class="num">${j.procs}</td>`+
+      `<td class="num">${esc(mib(j.live_mib))}${j.mem_mib>0?' / '+esc(mib(j.mem_mib)):''}</td>`+
+      `<td>${j.throttled?'<span class="chip warn">throttled for you</span>':''}</td></tr>`).join('')+
+    '</tbody></table>'
+    : `<p class="dim">Nothing is running on this machine`+
+      (st.completed_since_start>0
+        ? ` — ${st.completed_since_start} job(s) have finished since shome started.`
+        : '.')+`</p>`;
+
+  // Stale figures are called out rather than shown as current: an agent that
+  // has stopped writing is exactly when believing them would be worst.
+  const age = st.at ? (Date.now()-new Date(st.at).getTime())/1000 : 1e9;
+  $('#tick').textContent = age>30
+    ? 'stale — last written '+Math.round(age)+'s ago'
+    : 'updated '+new Date(st.at).toLocaleTimeString();
+  $('#tick').style.color = age>30 ? 'var(--bad)' : 'var(--dim)';
+}
+
+async function refresh(){
+  try {
+    const r = await api('/api/status');
+    if(!r.available){
+      $('#unavailable').hidden = false;
+      $('#unavailable').textContent = r.reason;
+      return;
+    }
+    $('#unavailable').hidden = true;
+    render(r.status);
+  } catch(e){
+    $('#unavailable').hidden = false;
+    $('#unavailable').textContent = e.message;
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>

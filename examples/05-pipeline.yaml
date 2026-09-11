@@ -1,0 +1,26 @@
+# A multi-stage DAG. Stages become ordinary jobs and edges become dependencies,
+# so every stage is visible in squeue like anything else.
+#
+#   shome pipeline run examples/05-pipeline.yaml
+#
+# `after` uses afterok: a stage does not run on a failed predecessor.
+name: analysis
+
+stages:
+  - name: embed
+    script: stages/embed.sh
+    mem: 256M
+    outputs: [vectors]
+
+  - name: index
+    script: stages/index.sh
+    after: [embed]
+    cpus: 2
+    outputs: [index]
+
+  - name: evaluate
+    script: stages/evaluate.sh
+    after: [index]
+    # Aggregate requests work here too: ask for totals and let shome place it.
+    # total_gpu_mem: 20G
+    # nodes: auto

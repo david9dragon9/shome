@@ -1,0 +1,1033 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>shome console</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --bg:#0d1017; --panel:#141821; --panel2:#1a1f2b; --fg:#e7eaf0; --dim:#8b93a1;
+  --line:#232a38; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --accent:#60a5fa;
+  --gpu:#c084fc; --track:#232a38;
+}
+@media(prefers-color-scheme:light){
+  :root{--bg:#f7f8fa;--panel:#fff;--panel2:#f0f2f6;--fg:#141821;--dim:#5c6472;
+        --line:#e2e5ea;--track:#e2e5ea}
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);
+     font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+a{color:var(--accent)}
+.dim{color:var(--dim)}
+.mono{font-variant-numeric:tabular-nums}
+
+header{display:flex;gap:1rem;align-items:center;padding:.6rem 1rem;
+       border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:20}
+header h1{font-size:.95rem;margin:0;font-weight:700;letter-spacing:.02em}
+.grow{flex:1}
+nav{display:flex;gap:.25rem;padding:0 1rem;border-bottom:1px solid var(--line);background:var(--panel)}
+nav button{border:none;border-bottom:2px solid transparent;background:none;color:var(--dim);
+           padding:.5rem .8rem;cursor:pointer;font:inherit}
+nav button.on{color:var(--fg);border-bottom-color:var(--accent)}
+main{padding:1rem;max-width:1600px;margin:0 auto}
+section{margin-bottom:1.5rem}
+h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);
+   margin:0 0 .6rem;font-weight:600}
+
+/* summary tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem .85rem}
+.tile .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.tile .v{font-size:1.5rem;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
+.tile .s{font-size:.72rem;color:var(--dim)}
+
+/* gauges */
+.gauge{height:7px;background:var(--track);border-radius:4px;overflow:hidden;margin:.35rem 0}
+.gauge>i{display:block;height:100%;border-radius:4px;transition:width .4s ease}
+.g-ok>i{background:var(--ok)}.g-warn>i{background:var(--warn)}.g-bad>i{background:var(--bad)}
+.g-unknown{background:repeating-linear-gradient(90deg,var(--track) 0 5px,transparent 5px 10px)}
+
+/* node cards */
+.nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:.75rem}
+.node{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.8rem}
+.node.down{opacity:.62}
+.node .top{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.5rem}
+.node .name{font-weight:700}
+.row{display:flex;align-items:center;gap:.5rem;font-size:.76rem}
+.row .lbl{width:2.6rem;color:var(--dim);flex:none}
+.row .num{width:5.6rem;text-align:right;color:var(--dim);flex:none;font-variant-numeric:tabular-nums}
+.row .gauge{flex:1;margin:0}
+.spark{display:block;width:100%;height:26px;margin:.45rem 0 .1rem}
+.chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem}
+.chip{font-size:.66rem;padding:.08rem .4rem;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+.chip.hot{color:var(--bad);border-color:var(--bad)}
+.chip.warn{color:var(--warn);border-color:var(--warn)}
+.chip.info{color:var(--accent);border-color:var(--accent)}
+.node .acts{display:flex;gap:.3rem;margin-top:.6rem;flex-wrap:wrap}
+
+/* state colours */
+.RUNNING,.UP{color:var(--ok)}
+.PENDING,.DRAIN,.SUSPENDED,.HELD{color:var(--warn)}
+.COMPLETED{color:var(--accent)}
+.FAILED,.OUT_OF_MEMORY,.TIMEOUT,.DOWN,.NODE_FAIL{color:var(--bad)}
+.CANCELLED{color:var(--dim)}
+
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{text-align:left;font-weight:600;color:var(--dim);padding:.35rem .6rem .35rem 0;
+   border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--bg)}
+td{padding:.32rem .6rem .32rem 0;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:hover{background:var(--panel2)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.reason{color:var(--dim);font-size:11.5px}
+
+button{font:inherit;background:transparent;color:var(--accent);border:1px solid var(--line);
+       border-radius:5px;padding:.12rem .5rem;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:currentColor}
+button:disabled{opacity:.35;cursor:default}
+button.bad{color:var(--bad)}
+button.warn{color:var(--warn)}
+button.solid{background:var(--accent);color:#07101f;border-color:var(--accent);font-weight:600}
+button.solid.bad{background:var(--bad);border-color:var(--bad);color:#1c0707}
+
+input,select{font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);
+             border-radius:5px;padding:.3rem .45rem}
+input:focus,select:focus{outline:1px solid var(--accent)}
+
+#login{padding:3rem 1rem;max-width:30rem;margin:0 auto}
+.err{color:var(--bad);margin:.5rem 0;white-space:pre-wrap}
+
+.alerts{display:flex;flex-direction:column;gap:.3rem}
+.alert{background:var(--panel);border:1px solid var(--warn);border-left-width:3px;
+       border-radius:6px;padding:.35rem .6rem;color:var(--warn);font-size:12.5px}
+
+/* modal */
+#modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;
+       justify-content:center;z-index:100;padding:1rem}
+#modal.on{display:flex}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+      padding:1.1rem;max-width:32rem;width:100%}
+.card h3{margin:0 0 .5rem;font-size:.95rem}
+.card p{margin:0 0 1rem;color:var(--dim);white-space:pre-wrap}
+.card .btns{display:flex;gap:.5rem;justify-content:flex-end}
+
+#toasts{position:fixed;right:1rem;bottom:1rem;display:flex;flex-direction:column;
+        gap:.4rem;z-index:200;max-width:26rem}
+.toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+       border-radius:6px;padding:.45rem .7rem;font-size:12.5px;box-shadow:0 4px 14px #0006}
+.toast.bad{border-left-color:var(--bad);color:var(--bad)}
+.toast.ok{border-left-color:var(--ok)}
+.hide{display:none !important}
+.pill{font-size:.68rem;padding:.05rem .45rem;border-radius:999px;background:var(--panel2);color:var(--dim)}
+.handout{margin-top:.8rem;background:var(--panel);border:1px solid var(--accent);
+         border-radius:8px;padding:.8rem}
+.handout h4{margin:0 0 .5rem;font-size:.8rem;color:var(--accent)}
+.handout pre{margin:0;padding:.6rem;background:var(--bg);border-radius:6px;
+             overflow-x:auto;font-size:12.5px;user-select:all}
+.handout .note{color:var(--dim);font-size:11.5px;margin-top:.5rem}
+.mach{color:var(--dim);font-size:11.5px}
+.grp{font-weight:700}
+</style>
+
+<div id="login" class="hide">
+  <h1>shome console</h1>
+  <p class="dim">Paste an API token. On the controller, print yours with:<br>
+     <code>shome token</code></p>
+  <p><input id="tok" type="password" placeholder="token" autocomplete="off" style="width:100%"></p>
+  <p><button class="solid" onclick="saveToken()">Connect</button></p>
+  <p class="err" id="loginerr"></p>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <h1 id="clustername" title="click to rename this cluster"
+        style="cursor:pointer" onclick="renameCluster()">shome</h1>
+    <span class="pill" id="who"></span>
+    <span class="grow"></span>
+    <span class="dim" id="tick"></span>
+    <button id="pausebtn" onclick="togglePause()">pause</button>
+    <button class="bad" onclick="confirmDrainAll()">drain all</button>
+    <button onclick="logout()">sign out</button>
+  </header>
+  <nav>
+    <button data-tab="overview" class="on">Overview</button>
+    <button data-tab="nodes">Nodes</button>
+    <button data-tab="jobs">Jobs</button>
+    <button data-tab="priority">Priority</button>
+    <button data-tab="access">Access</button>
+    <button data-tab="audit">Audit</button>
+  </nav>
+  <main>
+    <div id="tab-overview">
+      <section><h2>Cluster</h2><div class="tiles" id="tiles"></div></section>
+      <section id="alertbox" class="hide"><h2>Attention</h2><div class="alerts" id="alerts"></div></section>
+      <section><h2>Nodes</h2><div class="nodes" id="nodecards"></div></section>
+      <section><h2>Queue</h2><div id="queue"></div></section>
+    </div>
+    <div id="tab-nodes" class="hide">
+      <section><h2>Nodes</h2><div id="nodetable"></div></section>
+      <section><h2>Capability and enforcement</h2><div id="captable"></div></section>
+    </div>
+    <div id="tab-jobs" class="hide">
+      <section>
+        <h2>Filter</h2>
+        <input id="jobfilter" placeholder="name, user, node or state" oninput="render()" style="min-width:18rem">
+        <label class="dim" style="margin-left:1rem">
+          <input type="checkbox" id="showfinished" onchange="render()"> include finished
+        </label>
+      </section>
+      <section><h2>Jobs</h2><div id="jobtable"></div></section>
+    </div>
+    <div id="tab-priority" class="hide">
+      <section>
+        <h2>Queue order</h2>
+        <p class="dim" id="prio-explain"></p>
+        <div id="prio-form"></div>
+      </section>
+      <section>
+        <h2>Standings</h2>
+        <p class="dim">An account with twice the shares is entitled to twice the
+          cluster over time. FACTOR is 2<sup>-usage/shares</sup>: 1.00 means it has
+          used nothing, 0.50 means exactly its entitlement, lower means over it.</p>
+        <div id="prio-shares"></div>
+      </section>
+    </div>
+    <div id="tab-access" class="hide">
+      <section>
+        <h2>Add an account</h2>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <input id="uname" placeholder="name">
+          <select id="urole"><option value="user">user</option>
+            <option value="operator">operator</option><option value="admin">admin</option></select>
+          <input id="uquota" placeholder="quota, e.g. 100G" style="width:9rem">
+          <button class="solid" onclick="addUser()">create</button>
+        </div>
+        <div id="handout" class="handout hide"></div>
+      </section>
+      <section><h2>Accounts</h2><div id="usertable"></div></section>
+      <section>
+        <h2>Limits <span class="dim" id="qosfile"></span></h2>
+        <p class="dim" style="margin:.2rem 0 .6rem">
+          <b>Cluster totals</b> bound the whole cluster, whoever is asking.
+          <b>Per-account default</b> is what each account gets; an account's own
+          value replaces just that one limit for them.
+          <code>unlimited</code> means no limit; <code>0</code> means none allowed.</p>
+        <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.6rem">
+          <label class="dim">showing</label>
+          <select id="qosuser" onchange="loadQoS()"></select>
+        </div>
+        <div id="qostable"></div>
+      </section>
+      <section>
+        <h2>Who can log in</h2>
+        <p class="dim" style="margin:.2rem 0 .6rem">
+          Registered machines can log in now. Unused codes could add one.
+          Both are ways in, so both are listed.</p>
+        <div id="accesstable"></div>
+      </section>
+    </div>
+    <div id="tab-audit" class="hide">
+      <section>
+        <h2>Audit log <button onclick="verifyAudit()">verify hash chain</button></h2>
+        <p class="dim" id="auditverify"></p>
+        <div id="audittable"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="modal"><div class="card">
+  <h3 id="mtitle"></h3><p id="mbody"></p>
+  <div class="btns"><button onclick="closeModal()">Cancel</button>
+    <button class="solid bad" id="mok">Confirm</button></div>
+</div></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let token = localStorage.getItem('shome_token') || '';
+let dash = null, users = [], audit = [], access = {keys:[],codes:[]},
+    prio = null, me = null, tab = 'overview', paused = false, timer = null;
+
+// ---- api -------------------------------------------------------------
+async function api(path, opts={}){
+  const r = await fetch('/api/v1'+path, {...opts,
+    headers:{...(opts.headers||{}), 'Authorization':'Bearer '+token}});
+  if(!r.ok){
+    let msg = r.statusText;
+    try { msg = (await r.json()).error || msg; } catch(e){}
+    throw new Error(msg);
+  }
+  return r.status===204 ? null : r.json();
+}
+const post = p => api(p, {method:'POST'});
+
+function toast(msg, kind=''){
+  const el = document.createElement('div');
+  el.className = 'toast '+kind; el.textContent = msg;
+  $('#toasts').append(el);
+  setTimeout(()=>el.remove(), 5000);
+}
+
+// Every destructive action funnels through here. The console shows other
+// people's work; a misclick must not be able to destroy it silently.
+let modalOK = null;
+function confirmThen(title, body, fn){
+  $('#mtitle').textContent = title; $('#mbody').textContent = body;
+  modalOK = fn; $('#modal').classList.add('on');
+}
+function closeModal(){ $('#modal').classList.remove('on'); modalOK = null; }
+$('#mok').onclick = async () => { const f = modalOK; closeModal(); if(f) await f(); };
+$('#modal').onclick = e => { if(e.target.id==='modal') closeModal(); };
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+async function act(promise, okMsg){
+  try { await promise; toast(okMsg,'ok'); await refresh(); }
+  catch(e){ toast(e.message,'bad'); }
+}
+const enc = encodeURIComponent;
+window.cancelJob = (id,label,user) => confirmThen('Cancel job '+label,
+  'Owned by '+user+'. The job is stopped and cannot be resumed.',
+  ()=>act(post('/cancel/'+id), 'cancelled job '+label));
+window.holdJob    = (id,l) => act(post('/job/'+id+'/hold'), 'held job '+l);
+window.releaseJob = (id,l) => act(post('/job/'+id+'/release'), 'released job '+l);
+window.requeueJob = (id,l) => confirmThen('Requeue job '+l,
+  'The job is killed and starts again from the beginning. Anything it already wrote stays written.',
+  ()=>act(post('/job/'+id+'/requeue'), 'requeued job '+l));
+window.drainNode  = n => act(post('/node/'+enc(n)+'/drain?reason='+enc('drained from the console')),
+  'draining '+n);
+window.resumeNode = n => act(post('/node/'+enc(n)+'/resume'), 'resumed '+n);
+window.stopNode   = n => confirmThen('Stop the agent on '+n,
+  'The agent exits cleanly. Running jobs continue, and the machine leaves the cluster until it is started again.',
+  ()=>act(post('/node/'+enc(n)+'/stop'), 'asked '+n+' to stop'));
+window.forgetNode = n => confirmThen('Forget '+n,
+  'Removes it from the cluster entirely. Only do this for a machine that has left for good; its job history is kept.',
+  ()=>act(post('/node/'+enc(n)+'/remove'), 'forgot '+n));
+window.quarantine = u => confirmThen('Quarantine '+u,
+  'Revokes their token and cancels their running jobs immediately.',
+  ()=>act(post('/users/'+enc(u)+'/quarantine'), 'quarantined '+u));
+window.unquarantine = u => act(post('/users/'+enc(u)+'/unquarantine'), 'restored '+u);
+// Access management. Each of these is the exact endpoint the matching CLI
+// verb calls -- the console adds buttons, not behaviour, so anything possible
+// here is possible from a script and the two cannot disagree.
+window.enrollUser = async u => {          // shome admin enroll NAME
+  try {
+    const r = await post('/users/'+enc(u)+'/enroll');
+    await showHandout(u, r.code, r.expires_in);
+    toast('code issued for '+u,'ok');
+    await refresh();
+  } catch(e){ toast(e.message,'bad'); }
+};
+window.unenrollMachine = (u,fp,label) =>  // shome admin unenroll NAME FP
+  confirmThen('Sign '+u+' out of '+(label||fp),
+    'That machine can no longer log in, and every unused enrollment code for '+u+
+    ' is cancelled. Any session open on it is closed immediately.\n\n'+
+    'Their account, jobs and files are untouched.',
+    ()=>act(api('/users/'+enc(u)+'/unenroll', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({fingerprint: fp})}), 'signed '+u+' out of that machine'));
+window.unenrollAll = u =>                 // shome admin unenroll NAME --all
+  confirmThen('Sign '+u+' out everywhere',
+    'Every machine is signed out and every unused code cancelled. Open sessions '+
+    'close immediately.\n\nThe account itself is kept. They will need a new code to return.',
+    ()=>act(api('/users/'+enc(u)+'/unenroll', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({all:true})}), 'signed '+u+' out everywhere'));
+window.cancelCode = (u,id) =>             // shome admin code rm ID
+  confirmThen('Cancel code '+id,
+    'This unused code for '+u+' stops working. Machines already enrolled are unaffected.',
+    ()=>act(api('/codes/'+enc(id), {method:'DELETE'}), 'cancelled code '+id));
+
+// Limits. `POST /qos` sets the cluster defaults, `POST /users/{n}/qos` sets
+// one account's overrides -- the same two endpoints `shome admin qos set`
+// calls, with the same merge-then-write behaviour.
+const QOS_LABEL = {cluster:'the whole cluster', __default__:'every account'};
+window.setLimit = async (target, key, cur) => {
+  const label = QOS_LABEL[target] || target;
+  const v = prompt(
+    `${key} for ${label}\n\n`+
+    `A number, a size like 8G, a duration like 2h, or "unlimited".\n`+
+    `0 means none allowed.`, cur === 'unlimited' ? 'unlimited' : cur);
+  if(v === null) return;
+  try {
+    // Merge into what is already set, so changing one limit does not drop the
+    // rest -- exactly what the CLI does before writing.
+    const isCluster = target === 'cluster', isDefault = target === '__default__';
+    const who = (isCluster || isDefault) ? '' : target;
+    const q = await api('/qos'+(who?'?user='+enc(who):''));
+    const base = isCluster ? (q.cluster||{}) : isDefault ? (q.defaults||{}) : (q.overrides||{});
+    const body = {...base};
+    body[qosJsonKey(key)] = await parseLimit(key, v);
+    const path = isCluster ? '/qos/cluster' : isDefault ? '/qos' : '/users/'+enc(who)+'/qos';
+    await api(path,
+      {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    toast(key+' updated','ok'); await loadQoS();
+  } catch(e){ toast(e.message,'bad'); }
+};
+
+// resolveShown renders a bare layer without anyone's account resolved over it,
+// so "per-account default" shows what that layer says rather than what it
+// happens to mean for whoever asked.
+function resolveShown(layer, fallback){
+  const out = {};
+  for(const k of Object.keys(fallback)){
+    const j = qosJsonKey(k), v = layer[j];
+    out[k] = (v === undefined || v === null) ? 'unlimited'
+           : (v < 0 ? 'unlimited'
+           : QOS_SIZE.has(k) ? (v >= 1024 ? (v/1024).toFixed(0)+'G' : v+'M')
+           : String(v));
+  }
+  return out;
+}
+window.clearLimit = async (who, key) => {
+  try {
+    const q = await api('/qos?user='+enc(who));
+    const body = {...(q.overrides||{})};
+    delete body[qosJsonKey(key)];
+    await api('/users/'+enc(who)+'/qos',
+      {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    toast(key+' back to the cluster default','ok'); await loadQoS();
+  } catch(e){ toast(e.message,'bad'); }
+};
+
+// The JSON field a flag name maps to. Kept beside the parser so the two stay
+// together; both mirror internal/qos.
+const QOS_KEYS = {
+  'max-running-mem':'max_running_mem_mb', 'max-mem-per-job':'max_mem_mb_per_job',
+  'max-disk':'max_disk_mb',
+};
+const QOS_SIZE = new Set(['max-running-mem','max-mem-per-job','max-disk']);
+const qosJsonKey = k => QOS_KEYS[k] || k.replace(/-/g,'_');
+
+// Values go to the server in the units it stores: mebibytes for sizes, a
+// duration string for walltime, a plain count otherwise.
+async function parseLimit(key, v){
+  v = String(v).trim();
+  if(key === 'max-walltime') return v === 'unlimited' ? null : v;
+  if(v === 'unlimited') return -1;
+  if(QOS_SIZE.has(key)){
+    const m = /^([0-9.]+)\s*([TtGgMm]?)$/.exec(v);
+    if(!m) throw new Error('expected a size like 8G, 512M, or unlimited');
+    const mult = {T:1048576,t:1048576,G:1024,g:1024,M:1,m:1,'':1}[m[2]];
+    return Math.round(parseFloat(m[1]) * mult);
+  }
+  if(!/^\d+$/.test(v)) throw new Error('expected a whole number or unlimited');
+  return parseInt(v,10);
+}
+
+window.delUser = u => confirmThen('Delete account '+u,
+  'The account is removed. Their job history is kept for accounting.',
+  ()=>act(api('/users/'+enc(u), {method:'DELETE'}), 'deleted '+u));
+function confirmDrainAll(){
+  confirmThen('Drain every node',
+    'The whole cluster stops accepting new work. Running jobs continue. Resume nodes individually afterwards.',
+    ()=>act(post('/emergency/drain-all?reason='+enc('drain-all from the console')), 'draining all nodes'));
+}
+async function addUser(){
+  const name = $('#uname').value.trim();
+  if(!name) return toast('name required','bad');
+  const body = {name, role:$('#urole').value, quota:$('#uquota').value.trim()};
+  try {
+    await api('/users', {method:'POST', headers:{'Content-Type':'application/json'},
+                         body: JSON.stringify(body)});
+    // Two calls, the same two `shome admin user add` makes. Folding them into
+    // one endpoint would be changing the API to suit the console.
+    let code = null, expires = '';
+    try { const e = await post('/users/'+enc(name)+'/enroll');
+          code = e.code; expires = e.expires_in; } catch(e){}
+    await showHandout(name, code, expires);
+    $('#uname').value=''; $('#uquota').value='';
+    toast('created '+name,'ok'); await refresh();
+  } catch(e){ toast(e.message,'bad'); }
+}
+
+// The two lines to send someone. Displayed rather than toasted because the
+// code is shown once and cannot be recovered.
+//
+// The address comes from the controller, which is the only thing that knows
+// it. This used to read location.hostname and hardcode port 2222, which
+// meant the console -- bound to loopback by default, which is the whole
+// point of it -- rendered a literal "<controller>" for the reader to guess
+// at. The console is supposed to add buttons, not behaviour; working out an
+// address in JavaScript was behaviour, and it was wrong.
+async function showHandout(name, code, expires){
+  const el = $('#handout');
+  if(!code){ el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+
+  let info = null;
+  try { info = await api('/login'); } catch(e){}
+
+  if(!info || !info.enabled){
+    // A code with nowhere to use it. Still shown, because it has been
+    // issued and cannot be recovered, but the reason comes first.
+    el.innerHTML = `<h4>Code issued for ${esc(name)}, but there is nowhere to ssh to</h4>`+
+      `<div class="note">This cluster has no login node running. Turn one on with `+
+      `<code>shome admin config set ssh 2222</code>, then <code>shome restart</code>.</div>`+
+      `<pre>enrollment code: ${esc(code)}</pre>`;
+    return;
+  }
+  if(!info.hosts || info.hosts.length === 0){
+    el.innerHTML = `<h4>Code issued for ${esc(name)}, but the controller is unreachable</h4>`+
+      `<div class="note">It has no network address other than loopback, so nobody `+
+      `else can reach it.</div>`+
+      `<pre>enrollment code: ${esc(code)}</pre>`;
+    return;
+  }
+
+  const line = sshCommandFor(name, info.hosts[0], info.port);
+  // Alternates after the code, not between it and the command: the two
+  // lines somebody has to send belong together.
+  const alts = info.hosts.slice(1, 3)
+    .map(h => sshCommandFor(name, h, info.port));
+  el.innerHTML = `<h4>Send ${esc(name)} these two lines</h4>`+
+    `<pre>${esc(line)}\nenrollment code: ${esc(code)}</pre>`+
+    `<div class="note">Asked for once; the key their ssh client already offers is `+
+    `registered, and later logins need no code. Single use`+
+    (expires?`, valid ${esc(expires)}`:'')+`.</div>`+
+    (alts.length
+      ? `<div class="note">If that address is not reachable from their network, `+
+        `these also work:</div><pre>${esc(alts.join('\n'))}</pre>`
+      : '');
+}
+
+// One ssh command line, quoted where a shell would mangle it.
+//
+// An IPv6 address needs brackets, which zsh treats as a glob and refuses with
+// "no matches found" -- so the line the console shows has to be one that can
+// actually be pasted.
+function sshCommandFor(user, host, port){
+  let target = host.includes(':') ? `${user}@[${host}]` : `${user}@${host}`;
+  if(/[[\]*?{}]/.test(target)) target = `'${target}'`;
+  return `ssh -p ${port||2222} ${target}`;
+}
+async function verifyAudit(){
+  try {
+    const r = await api('/audit/verify');
+    $('#auditverify').textContent = r.ok
+      ? `hash chain intact across ${r.checked} entries`
+      : `TAMPERING DETECTED at entry ${r.bad} of ${r.checked}`;
+    $('#auditverify').style.color = r.ok ? 'var(--ok)' : 'var(--bad)';
+  } catch(e){ toast(e.message,'bad'); }
+}
+
+// ---- formatting ------------------------------------------------------
+function mib(m){
+  if(m===undefined||m===null||m<0) return '-';
+  const b = m*1048576;
+  if(b>=1099511627776) return (b/1099511627776).toFixed(1)+'T';
+  if(b>=1073741824) return (b/1073741824).toFixed(1)+'G';
+  if(b>=1048576) return Math.round(b/1048576)+'M';
+  return Math.round(b/1024)+'K';
+}
+const pct = v => (v===undefined||v===null||v<0) ? '-' : Math.round(v)+'%';
+function gcls(v){ if(v===null||v===undefined||v<0) return 'g-unknown';
+  return v>=90?'g-bad':v>=70?'g-warn':'g-ok'; }
+function gauge(v){
+  const c = gcls(v), w = (v===null||v===undefined||v<0)?0:Math.min(100,v);
+  return `<div class="gauge ${c}"><i style="width:${w}%"></i></div>`;
+}
+// Sparkline as an inline SVG polyline. Fixed 0..100 scale, matching the CLI:
+// auto-scaling makes an idle machine's noise look like a crisis.
+function spark(samples, key, color){
+  if(!samples || samples.length<2) return '<svg class="spark"></svg>';
+  const w=100, h=26, n=samples.length;
+  const pts = samples.map((s,i)=>{
+    const v = Math.max(0, Math.min(100, s[key]??0));
+    return `${(i/(n-1)*w).toFixed(2)},${(h-(v/100*h)).toFixed(2)}`;
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.2"
+      vector-effect="non-scaling-stroke"/></svg>`;
+}
+function table(cols, rows, aligns=[]){
+  if(!rows.length) return '<p class="dim">nothing here</p>';
+  return `<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map(r=>`<tr>${r.map((c,i)=>
+      `<td class="${aligns[i]==='r'?'num':''}">${c}</td>`).join('')}</tr>`).join('')+
+    '</tbody></table>';
+}
+
+// ---- render ----------------------------------------------------------
+function render(){
+  if(tab==='priority') renderPriority();
+  if(!dash) return;
+  const t = dash.totals;
+  $('#tiles').innerHTML = [
+    tile('Nodes', `${t.nodes_up}/${t.nodes}`,
+      [t.nodes_drain?`${t.nodes_drain} draining`:'', t.nodes_down?`${t.nodes_down} down`:'']
+        .filter(Boolean).join(' · ') || 'all healthy'),
+    tile('CPU in use', pct(t.cpu_percent),
+      `${t.used_cpus}/${t.cpus} cores allocated`, t.cpu_percent),
+    tile('Memory in use', pct(t.mem_percent),
+      `${mib(t.used_mem_mib)} of ${mib(t.mem_mib)} allocated`, t.mem_percent),
+    tile('GPUs', t.gpus, `${mib(t.gpu_mem_mib)} GPU memory`),
+    tile('Running', t.running, `${t.pending} pending · ${t.held} held`),
+  ].join('');
+
+  const al = dash.alerts||[];
+  $('#alertbox').classList.toggle('hide', al.length===0);
+  $('#alerts').innerHTML = al.map(a=>`<div class="alert">${esc(a)}</div>`).join('');
+
+  $('#nodecards').innerHTML = (dash.nodes||[]).map(nodeCard).join('') ||
+    '<p class="dim">No nodes yet. Run <code>shome invite</code> on the controller.</p>';
+  $('#queue').innerHTML = jobTable((dash.jobs||[]).slice(0,25));
+
+  $('#nodetable').innerHTML = table(
+    ['node','state','os/arch','tier','cpu','mem','gpu','jobs','seen','actions'],
+    (dash.nodes||[]).map(n=>[
+      esc(n.name)+(n.note?`<div class="reason">${esc(n.note)}</div>`:''),
+      `<span class="${esc(n.state)}">${esc(n.state)}</span>`+
+        (n.reason?`<div class="reason">${esc(n.reason)}</div>`:''),
+      esc(n.os+'/'+n.arch), esc(n.tier),
+      `${n.used_cpus}/${n.cpus}`+dim(n.has_telemetry&&!n.stale?` (${pct(n.telemetry.cpu_percent)})`:''),
+      `${mib(n.used_mem_mib)}/${mib(n.mem_mib)}`,
+      n.gpus ? esc((n.gpu_kind||'')+' '+mib(n.gpu_mem_mib)) : '-',
+      n.running_jobs, esc(n.last_seen||''),
+      nodeButtons(n),
+    ]), [,,,,'r','r','r','r']);
+
+  $('#captable').innerHTML = table(['node','memory limit','cpu limit','known limitations'],
+    (dash.nodes||[]).map(n=>[esc(n.name), esc(n.mem_enforcement), esc(n.cpu_enforcement),
+      (n.limitations||[]).map(l=>`<div class="reason">${esc(l)}</div>`).join('')||'<span class="dim">none</span>']));
+
+  const q = $('#jobfilter').value.trim().toLowerCase();
+  let list = (dash.jobs||[]);
+  if($('#showfinished').checked) list = list.concat(dash.recent||[]);
+  if(q) list = list.filter(j=>(`${j.label} ${j.name} ${j.user} ${j.node} ${j.state}`)
+                                .toLowerCase().includes(q));
+  $('#jobtable').innerHTML = jobTable(list);
+
+  // Quote a value safely into an inline onclick handler.
+  const qq = s => "'"+String(s).replace(/'/g,"\\'")+"'";
+  $('#usertable').innerHTML = table(
+    ['name','role','quota','status','machines','actions'],
+    users.map(u=>{
+      const mine = (access.keys||[]).filter(k=>k.user===u.name).length;
+      const codes = (access.codes||[]).filter(c=>c.user===u.name).length;
+      let m = mine ? `${mine} machine${mine===1?'':'s'}` : '<span class="dim">none</span>';
+      if(codes) m += ` <span class="dim">+${codes} unused code${codes===1?'':'s'}</span>`;
+      return [esc(u.name), esc(u.role),
+        u.quota_mib>0?mib(u.quota_mib):'<span class="dim">unlimited</span>',
+        u.disabled?'<span class="FAILED">quarantined</span>':'<span class="RUNNING">active</span>',
+        m,
+        `<button onclick="enrollUser(${qq(u.name)})">enroll a machine</button>`+
+        (mine?` <button class="warn" onclick="unenrollAll(${qq(u.name)})">sign out everywhere</button>`:'')+
+        ` `+(u.disabled
+          ? `<button onclick="unquarantine(${qq(u.name)})">restore</button>`
+          : `<button class="warn" onclick="quarantine(${qq(u.name)})">quarantine</button>`)+
+        ` <button class="bad" onclick="delUser(${qq(u.name)})">delete</button>`];
+    }));
+
+  // Machines and unused codes in one list: both are ways in, and separating
+  // them would answer only half of "who can reach this cluster".
+  const rows = [];
+  for(const k of (access.keys||[])){
+    rows.push([esc(k.user), '<span class="grp">machine</span>',
+      esc(k.comment||'-')+`<div class="mach">${esc(k.fingerprint)}</div>`,
+      k.last_used ? esc(String(k.last_used).slice(0,19).replace('T',' '))
+                  : '<span class="dim">never used</span>',
+      `<button class="bad" onclick="unenrollMachine(${qq(k.user)},${qq(k.fingerprint)},${qq(k.comment||'')})">sign out</button>`]);
+  }
+  for(const c of (access.codes||[])){
+    rows.push([esc(c.user), '<span class="grp" style="color:var(--warn)">unused code</span>',
+      esc(c.id),
+      '<span class="dim">expires '+esc(String(c.expires).slice(0,19).replace('T',' '))+'</span>',
+      `<button class="bad" onclick="cancelCode(${qq(c.user)},${qq(c.id)})">cancel</button>`]);
+  }
+  // Who the limits table can show: the cluster, or any account.
+  const sel = $('#qosuser');
+  const prev = sel.value;
+  sel.innerHTML =
+    '<option value="cluster">cluster totals (across everybody)</option>'+
+    '<option value="__default__">per-account default</option>'+
+    users.map(u=>`<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('');
+  sel.value = prev && [...sel.options].some(o=>o.value===prev) ? prev : 'cluster';
+
+  $('#accesstable').innerHTML = rows.length
+    ? table(['user','kind','identity','last used / expires','actions'], rows)
+    : '<p class="dim">nobody can log in. Use "enroll a machine" above.</p>';
+
+  $('#audittable').innerHTML = table(['seq','time','job','event','detail'],
+    audit.map(e=>[e.Seq??'', esc(String(e.At||'').slice(0,19).replace('T',' ')),
+      e.JobID||'', esc(e.Kind), esc(e.Detail)]), ['r',,'r']);
+
+  $('#tick').textContent = (paused?'paused · ':'')+'updated '+
+    new Date(dash.at).toLocaleTimeString();
+}
+// The limits table. GET /qos returns defaults, this account's overrides, the
+// resolved values and current usage in one response -- the same one
+// `shome admin qos show` prints.
+async function loadQoS(){
+  const sel = $('#qosuser');
+  const target = sel.value || 'cluster';
+  // Three things to show, and they are not the same question: the aggregate
+  // ceiling, what each account gets, and what applies to one person.
+  const isCluster = target === 'cluster';
+  const isDefault = target === '__default__';
+  const who = (isCluster || isDefault) ? '' : target;
+  let q;
+  try { q = await api('/qos'+(isCluster ? '?user=cluster' : who ? '?user='+enc(who) : '')); }
+  catch(e){ $('#qostable').innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  $('#qosfile').textContent = q.file || '';
+
+  const using = isDefault ? {} : {
+    'max-submitted-jobs': q.usage?.submitted_jobs,
+    'max-running-jobs':   q.usage?.running_jobs,
+    'max-running-cpus':   q.usage?.running_cpus,
+    'max-running-gpus':   q.usage?.running_gpus,
+    'max-running-mem':    q.usage?.running_mem_mb,
+  };
+  const over = q.overrides || {};
+  const layer = isCluster ? (q.cluster || {}) : isDefault ? (q.defaults || {}) : over;
+  // When showing the per-account default on its own, the resolved values come
+  // from that layer rather than from anyone's account.
+  const shown = isDefault ? resolveShown(q.defaults || {}, q.effective || {}) : (q.effective || {});
+  const rows = Object.entries(shown).map(([k,v])=>{
+    const set = Object.prototype.hasOwnProperty.call(layer, qosJsonKey(k));
+    const isOver = !isCluster && !isDefault && set;
+    let use = using[k];
+    use = (use === undefined || use === null) ? '-'
+        : (k === 'max-running-mem' ? use+' MiB' : String(use));
+    const source = isCluster
+      ? (set ? '<span class="RUNNING">cluster-wide</span>'
+             : '<span class="dim">not set (unlimited)</span>')
+      : isDefault
+      ? (set ? '<span class="RUNNING">set</span>' : '<span class="dim">unlimited</span>')
+      : (isOver ? '<span class="RUNNING">this account</span>'
+                : '<span class="dim">per-account default</span>');
+    return [
+      esc(k),
+      `<span class="${v==='unlimited'?'dim':''}">${esc(v)}</span>`,
+      use,
+      source,
+      `<button onclick="setLimit('${esc(target)}','${esc(k)}','${esc(v)}')">change</button>`+
+        (isOver?` <button class="warn" onclick="clearLimit('${esc(who)}','${esc(k)}')">reset</button>`:''),
+    ];
+  });
+  $('#qostable').innerHTML = table(
+    ['limit','value','in use','source','actions'], rows, [,,'r']);
+}
+
+const dim = s => s?`<span class="dim">${esc(s)}</span>`:'';
+function tile(k,v,s,gaugeVal){
+  return `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(String(v))}</div>`+
+    (gaugeVal!==undefined?gauge(gaugeVal):'')+`<div class="s">${esc(s)}</div></div>`;
+}
+
+function nodeCard(n){
+  const live = n.has_telemetry && !n.stale;
+  const tel = n.telemetry||{};
+  const cpu = live?tel.cpu_percent:-1;
+  const mem = live?memPct(tel):-1;
+  const chips = [];
+  if(n.tier && n.tier!=='full') chips.push(['warn', n.tier+' tier']);
+  if(live && tel.on_battery) chips.push(['warn','on battery']);
+  if(live && ['serious','critical'].includes(tel.thermal)) chips.push(['hot','thermal '+tel.thermal]);
+  if(live && tel.memory_pressure==='critical') chips.push(['hot','memory pressure']);
+  if(live && tel.user_idle_sec>=0 && tel.user_idle_sec<60) chips.push(['info','owner active']);
+  if(n.stale && n.state==='UP') chips.push(['warn','no telemetry']);
+  if(n.gpu_kind) chips.push(['', n.gpu_kind+(n.gpu_name?' · '+n.gpu_name:'')]);
+  if(live && tel.load_avg_1>=0) chips.push(['','load '+tel.load_avg_1.toFixed(2)]);
+
+  return `<div class="node ${n.state==='DOWN'?'down':''}">
+    <div class="top"><span class="name">${esc(n.name)}</span>
+      <span class="${esc(n.state)}">${esc(n.state)}</span>
+      <span class="grow"></span>
+      <span class="dim">${n.running_jobs} job${n.running_jobs===1?'':'s'}</span></div>
+    ${n.reason?`<div class="reason">${esc(n.reason)}</div>`:''}
+    <div class="row"><span class="lbl">cpu</span>${gauge(cpu)}
+      <span class="num">${pct(cpu)} · ${n.used_cpus}/${n.cpus}</span></div>
+    <div class="row"><span class="lbl">mem</span>${gauge(mem)}
+      <span class="num">${pct(mem)} · ${mib(n.mem_mib)}</span></div>
+    ${n.gpus?`<div class="row"><span class="lbl">gpu</span>${gauge(live?tel.gpu_percent:-1)}
+      <span class="num">${pct(live?tel.gpu_percent:-1)} · ${mib(n.gpu_mem_mib)}</span></div>`:''}
+    ${spark(n.history||[], 'cpu', 'var(--accent)')}
+    <div class="chips">${chips.map(([c,t])=>`<span class="chip ${c}">${esc(t)}</span>`).join('')}</div>
+    <div class="acts">${nodeButtons(n)}</div></div>`;
+}
+function memPct(t){
+  if(!t || !t.mem_total_bytes || t.mem_total_bytes<=0) return -1;
+  return 100*t.mem_used_bytes/t.mem_total_bytes;
+}
+function nodeButtons(n){
+  const q = "'"+String(n.name).replace(/'/g,"\\'")+"'";
+  return (n.state==='DRAIN'
+      ? `<button onclick="resumeNode(${q})">resume</button>`
+      : `<button class="warn" onclick="drainNode(${q})">drain</button>`)+
+    ` <button onclick="renameNode(${q})">rename</button>`+
+    ` <button onclick="stopNode(${q})">stop agent</button>`+
+    ` <button class="bad" onclick="forgetNode(${q})">forget</button>`;
+}
+
+// Naming, the third door onto cluster.yaml alongside the CLI and the file
+// itself. The console calls the same endpoints `shome admin` does rather
+// than writing the file, so there is one code path that validates a name and
+// one that decides a label does not collide.
+function renameNode(n){
+  const name = prompt('What should this machine be called?\n\n'+
+    'A label is a display name: it is shown everywhere and accepted anywhere '+
+    'a machine name is, while the certificate identity underneath is '+
+    'unchanged.\n\nLeave empty to clear it.', n);
+  if(name === null) return;
+  act(api('/cluster/node', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(name.trim() === ''
+      ? {node:n, clear:true}
+      : {node:n, label:name.trim()})}),
+    name.trim() === '' ? 'cleared the label for '+n : n+' is now called '+name.trim());
+}
+
+function renameCluster(){
+  const name = prompt('What should this cluster be called?\n\n'+
+    'It appears in shell prompts, the login banner and this page.',
+    (dash && dash.cluster) || 'shome');
+  if(name === null) return;
+  act(api('/cluster', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: name.trim()})}), 'cluster renamed');
+}
+
+function jobTable(list){
+  return table(['job','name','user','state','time','cpus','mem live/req','node','actions'],
+    list.map(j=>{
+      const state = j.held ? 'HELD' : j.state;
+      const finished = !['RUNNING','PENDING'].includes(j.state);
+      const q = String(j.id);
+      const lbl = "'"+String(j.label).replace(/'/g,"\\'")+"'";
+      const usr = "'"+String(j.user).replace(/'/g,"\\'")+"'";
+      let acts = '';
+      if(!finished){
+        acts = `<button class="bad" onclick="cancelJob(${q},${lbl},${usr})">cancel</button>`;
+        if(j.held) acts += ` <button onclick="releaseJob(${q},${lbl})">release</button>`;
+        else if(j.state==='PENDING') acts += ` <button onclick="holdJob(${q},${lbl})">hold</button>`;
+        if(j.state==='RUNNING') acts += ` <button class="warn" onclick="requeueJob(${q},${lbl})">requeue</button>`;
+      }
+      return [esc(j.label), esc(j.name), esc(j.user),
+        `<span class="${esc(state)}">${esc(state)}</span>`+
+          (j.reason?`<div class="reason">${esc(j.reason)}</div>`:'')+
+          (j.throttled?'<div class="reason">throttled for the machine\'s owner</div>':''),
+        esc(j.elapsed), j.cpus,
+        (j.live_mib>=0?mib(j.live_mib):'-')+' / '+mib(j.mem_mib),
+        esc(j.node||''), acts];
+    }), [,,,,'r','r','r']);
+}
+
+// ---- priority --------------------------------------------------------
+//
+// The third door onto priority.yaml, alongside `shome admin priority` and the
+// file. It posts the whole document to the same endpoint the CLI uses, so
+// validation -- refusing every-weight-zero, refusing negatives -- happens in
+// one place rather than being reimplemented in JavaScript where it would
+// drift.
+
+const PRIO_FIELDS = [
+  ['enabled', 'bool', 'order the queue by priority instead of submission time'],
+  ['backfill', 'bool', 'let a shorter job use a gap it will hand back in time'],
+  ['backfill_depth', 'int', 'how many waiting jobs get a machine held for them'],
+  ['weight_fairshare', 'num', 'how much recent usage lowers priority'],
+  ['weight_age', 'num', 'how much waiting raises priority'],
+  ['weight_size', 'num', 'how much job size matters (0 = not at all)'],
+  ['favor_small', 'bool', 'with a size weight set, prefer smaller jobs'],
+  ['half_life', 'dur', 'how long until past usage counts half as much'],
+  ['max_age', 'dur', 'the wait at which the age factor is at its maximum'],
+  ['gpu_weight', 'num', 'GPU-seconds per CPU-second when measuring usage'],
+  ['mem_gb_weight', 'num', 'GB-seconds per CPU-second when measuring usage'],
+  ['default_shares', 'num', 'entitlement for an account with no share set'],
+];
+
+// Read one field out of the nested config the API returns.
+function prioGet(c, name){
+  switch(name){
+    case 'weight_fairshare': return c.weights.fairshare;
+    case 'weight_age':       return c.weights.age;
+    case 'weight_size':      return c.weights.size;
+    case 'gpu_weight':       return c.resource_weights.gpu;
+    case 'mem_gb_weight':    return c.resource_weights.mem_gb;
+    // Go marshals a duration as nanoseconds; people read hours.
+    case 'half_life':        return nsToSpan(c.half_life);
+    case 'max_age':          return nsToSpan(c.max_age);
+    default:                 return c[name];
+  }
+}
+
+// Durations arrive as nanoseconds and are edited as text, so they round-trip
+// through the same spellings the CLI accepts.
+function nsToSpan(ns){
+  if(!ns) return '0';
+  const s = ns/1e9;
+  if(s % 86400 === 0) return (s/86400)+'d';
+  if(s % 3600 === 0)  return (s/3600)+'h';
+  if(s % 60 === 0)    return (s/60)+'m';
+  return s+'s';
+}
+function spanToNs(v){
+  const m = String(v).trim().match(/^(\d+(?:\.\d+)?)\s*([smhdw]?)$/);
+  if(!m) return null;
+  const n = parseFloat(m[1]);
+  const mult = {'':1e9, s:1e9, m:6e10, h:3.6e12, d:8.64e13, w:6.048e14}[m[2]];
+  return Math.round(n*mult);
+}
+
+function renderPriority(){
+  if(!prio){ $('#prio-form').innerHTML = '<p class="dim">unavailable</p>'; return; }
+  $('#prio-explain').textContent = prio.explain || '';
+  // A plain user sees the rules and their own standing -- that is the point
+  // of publishing the weights -- but cannot change either.
+  const admin = !me || me.role !== 'user';
+
+  const c = prio.config;
+  $('#prio-form').innerHTML = PRIO_FIELDS.map(([name, kind, help]) => {
+    const v = prioGet(c, name);
+    let input;
+    if(!admin){
+      input = `<code>${esc(String(v))}</code>`;
+    } else if(kind === 'bool'){
+      input = `<input type="checkbox" id="pf-${name}" ${v ? 'checked' : ''}>`;
+    } else {
+      input = `<input id="pf-${name}" value="${esc(String(v))}" style="width:7rem">`;
+    }
+    return `<div style="margin:.35rem 0">
+        <label style="display:inline-block;min-width:11rem">${esc(name.replace(/_/g,'-'))}</label>
+        ${input}
+        <span class="dim" style="margin-left:.75rem">${esc(help)}</span>
+      </div>`;
+  }).join('') + (admin
+    ? `<div style="margin-top:.75rem">
+       <button onclick="savePriority()">save</button>
+       <span class="dim" style="margin-left:.75rem">file: ${esc(prio.file||'')}</span>
+     </div>`
+    : '<p class="dim">Only an admin can change these.</p>');
+
+  const rows = (prio.shares||[]).map(s => {
+    const r = [esc(s.user),
+      admin ? `<input id="sh-${esc(s.user)}" value="${s.shares}" style="width:4rem">`
+            : String(s.shares),
+      s.norm_shares.toFixed(4),
+      esc(usageSpan(s.raw_usage)),
+      s.norm_usage.toFixed(4),
+      s.factor.toFixed(4)];
+    if(admin) r.push(`<button onclick="saveShares('${esc(s.user)}')">set</button>`);
+    return r;
+  });
+  const cols = ['account','shares','norm shares','raw usage','norm usage','factor'];
+  if(admin) cols.push('');
+  $('#prio-shares').innerHTML = rows.length
+    ? table(cols, rows, [,,'r','r','r','r'])
+    : '<p class="dim">no accounts yet</p>';
+}
+
+// Raw resource-seconds run to seven digits within a day of ordinary use.
+function usageSpan(v){
+  if(!v || v <= 0) return '0';
+  if(v < 3600) return v.toFixed(0)+'s';
+  if(v < 3600*48) return (v/3600).toFixed(1)+'h';
+  return (v/86400).toFixed(1)+'d';
+}
+
+async function savePriority(){
+  const c = JSON.parse(JSON.stringify(prio.config));
+  for(const [name, kind] of PRIO_FIELDS.map(f=>[f[0], f[1]])){
+    const el = $('#pf-'+name);
+    if(!el) continue;
+    let v;
+    if(kind === 'bool'){ v = el.checked; }
+    else if(kind === 'dur'){
+      v = spanToNs(el.value);
+      if(v === null){ return act(Promise.reject(
+        new Error(`${name}: expected something like 7d, 12h or 30m`)), ''); }
+    } else {
+      v = Number(el.value);
+      if(!isFinite(v)){ return act(Promise.reject(
+        new Error(`${name}: expected a number`)), ''); }
+    }
+    switch(name){
+      case 'weight_fairshare': c.weights.fairshare = v; break;
+      case 'weight_age':       c.weights.age = v; break;
+      case 'weight_size':      c.weights.size = v; break;
+      case 'gpu_weight':       c.resource_weights.gpu = v; break;
+      case 'mem_gb_weight':    c.resource_weights.mem_gb = v; break;
+      case 'backfill_depth':   c.backfill_depth = Math.round(v); break;
+      default:                 c[name] = v;
+    }
+  }
+  await act(api('/priority', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(c)}),
+    'priority policy saved');
+}
+
+async function saveShares(user){
+  const el = $('#sh-'+user);
+  const n = Number(el.value);
+  if(!isFinite(n) || n < 0){
+    return act(Promise.reject(new Error('shares must be a number, 0 for the default')), '');
+  }
+  await act(api('/users/'+enc(user)+'/shares', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({shares:n})}),
+    n === 0 ? user+' is back to the default entitlement' : user+' now has '+n+' shares');
+}
+
+// ---- lifecycle -------------------------------------------------------
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = () => {
+    tab = b.dataset.tab;
+    document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
+    ['overview','nodes','jobs','priority','access','audit'].forEach(t=>
+      $('#tab-'+t).classList.toggle('hide', t!==tab));
+    refresh();
+  };
+});
+function togglePause(){
+  paused = !paused;
+  $('#pausebtn').textContent = paused ? 'resume' : 'pause';
+  if(!paused) refresh();
+}
+
+async function refresh(){
+  try {
+    dash = await api('/dashboard');
+    if(dash.cluster){
+      $('#clustername').textContent = dash.cluster;
+      document.title = dash.cluster + ' - shome';
+    }
+    // Only fetched for the tab being looked at: these are admin-only routes,
+    // and a plain user polling them would collect a 403 every two seconds.
+    if(tab==='access'){
+      users  = await api('/users').catch(()=>[]);
+      access = await api('/keys').catch(()=>({keys:[],codes:[]}));
+    }
+    if(tab==='audit') audit = await api('/audit?n=200').catch(()=>[]);
+    if(tab==='priority') prio = await api('/priority').catch(()=>null);
+    render();
+    if(tab==='access') await loadQoS();
+  } catch(e){
+    $('#tick').textContent = 'error: '+e.message;
+    if(/token|unauthor|forbidden/i.test(e.message)) boot();
+  }
+}
+function saveToken(){ token = $('#tok').value.trim(); localStorage.setItem('shome_token', token); boot(); }
+function logout(){ localStorage.removeItem('shome_token'); token=''; if(timer) clearInterval(timer); boot(); }
+
+async function boot(){
+  if(!token){ $('#login').classList.remove('hide'); $('#app').classList.add('hide'); return; }
+  try {
+    me = await api('/whoami');
+    $('#who').textContent = me.user+' · '+me.role;
+    // A plain user cannot act on anything but their own jobs; hiding the
+    // cluster-wide levers is honesty about that, not security -- the server
+    // rejects them regardless.
+    if(me.role === 'user') document.querySelectorAll('nav button[data-tab="access"],nav button[data-tab="audit"]')
+      .forEach(b=>b.classList.add('hide'));
+    $('#login').classList.add('hide'); $('#app').classList.remove('hide');
+    await refresh();
+    if(timer) clearInterval(timer);
+    timer = setInterval(()=>{ if(!paused) refresh(); }, 2000);
+  } catch(e){
+    $('#login').classList.remove('hide'); $('#app').classList.add('hide');
+    $('#loginerr').textContent = e.message;
+  }
+}
+boot();
+</script>
